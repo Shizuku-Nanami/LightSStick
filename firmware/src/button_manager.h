@@ -3,6 +3,7 @@
  * @brief 按键管理模块
  * 
  * 使用 GPIOTE 中断检测按键，20ms 去抖
+ * BTN_PREV 长按 5 秒实现假关机/假开机
  */
 
 #ifndef BUTTON_MANAGER_H
@@ -46,5 +47,12 @@ void button_manager_enable(void);
  * @brief 禁用按键检测
  */
 void button_manager_disable(void);
+
+/**
+ * @brief 查询是否处于假关机状态
+ * 
+ * @return true 假关机中, false 正常工作
+ */
+bool button_manager_is_fake_off(void);
 
 #endif // BUTTON_MANAGER_H
