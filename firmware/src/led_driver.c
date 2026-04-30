@@ -151,25 +151,22 @@ static inline uint8_t clamp_to_uint8(float val)
 void led_color_correct(uint8_t r_in, uint8_t g_in, uint8_t b_in, uint8_t w_in,
                        uint8_t *r_out, uint8_t *g_out, uint8_t *b_out, uint8_t *w_out)
 {
-    // [D] Gamma Decode：sRGB → Linear
-    float r_lin = gamma_decode(r_in);
-    float g_lin = gamma_decode(g_in);
-    float b_lin = gamma_decode(b_in);
+    // [C] 3×3 颜色校正矩阵（跳过 Gamma，直接在输入值上操作）
+    float r_m = (float)r_in;
+    float g_m = (float)g_in;
+    float b_m = (float)b_in;
+    apply_matrix(r_m, g_m, b_m, &r_m, &g_m, &b_m);
     
-    // [C] 3×3 颜色校正矩阵（线性空间）
-    float r_m, g_m, b_m;
-    apply_matrix(r_lin, g_lin, b_lin, &r_m, &g_m, &b_m);
-    
-    // [C+] 亮度增益（在线性空间中应用，保持颜色比例）
+    // [C+] 亮度增益
     r_m *= BRIGHTNESS_BOOST;
     g_m *= BRIGHTNESS_BOOST;
     b_m *= BRIGHTNESS_BOOST;
     
-    // [B] RGB → RGBW 分离（线性空间）
+    // [B] RGB → RGBW 分离
     float r_w, g_w, b_w, w_f;
     rgb_to_rgbw(r_m, g_m, b_m, &r_w, &g_w, &b_w, &w_f);
     
-    // 亮度限制（线性空间）
+    // 亮度限制（Clamp 0-255）
     if (r_w < 0.0f) r_w = 0.0f;
     if (r_w > 255.0f) r_w = 255.0f;
     if (g_w < 0.0f) g_w = 0.0f;
@@ -179,11 +176,11 @@ void led_color_correct(uint8_t r_in, uint8_t g_in, uint8_t b_in, uint8_t w_in,
     if (w_f < 0.0f) w_f = 0.0f;
     if (w_f > 255.0f) w_f = 255.0f;
     
-    // Gamma Encode：Linear → sRGB
-    *r_out = gamma_encode(r_w);
-    *g_out = gamma_encode(g_w);
-    *b_out = gamma_encode(b_w);
-    *w_out = clamp_to_uint8(w_f + (float)w_in);  // 叠加原始 W 通道
+    // 输出（跳过 Gamma Encode）
+    *r_out = (uint8_t)(r_w + 0.5f);
+    *g_out = (uint8_t)(g_w + 0.5f);
+    *b_out = (uint8_t)(b_w + 0.5f);
+    *w_out = clamp_to_uint8(w_f + (float)w_in);
 }
 
 // ============================================================
