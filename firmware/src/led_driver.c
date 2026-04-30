@@ -76,7 +76,10 @@ static const uint8_t linear_to_srgb[256] = {
 #define M_BB  1.00f    // B → B
 
 // [B] RGBW 分离配置
-#define W_MAX_LIMIT    200.0f   // 白色分量上限（防止 W 通道过亮）
+#define W_MAX_LIMIT    255.0f   // 白色分量上限（允许满亮度）
+
+// 亮度增益（1.5 = 提升 50%）
+#define BRIGHTNESS_BOOST  1.50f
 
 // ============================================================
 // 颜色校正流水线内部函数
@@ -156,6 +159,11 @@ void led_color_correct(uint8_t r_in, uint8_t g_in, uint8_t b_in, uint8_t w_in,
     // [C] 3×3 颜色校正矩阵（线性空间）
     float r_m, g_m, b_m;
     apply_matrix(r_lin, g_lin, b_lin, &r_m, &g_m, &b_m);
+    
+    // [C+] 亮度增益（在线性空间中应用，保持颜色比例）
+    r_m *= BRIGHTNESS_BOOST;
+    g_m *= BRIGHTNESS_BOOST;
+    b_m *= BRIGHTNESS_BOOST;
     
     // [B] RGB → RGBW 分离（线性空间）
     float r_w, g_w, b_w, w_f;
