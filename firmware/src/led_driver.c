@@ -137,22 +137,20 @@ static inline uint8_t clamp_to_uint8(float val)
 void led_color_correct(uint8_t r_in, uint8_t g_in, uint8_t b_in, uint8_t w_in,
                        uint8_t *r_out, uint8_t *g_out, uint8_t *b_out, uint8_t *w_out)
 {
-    // 最大亮度模式：跳过颜色校正矩阵（绿色不再被削减20%），
-    // 跳过 RGB→RGBW 分离（不再把颜色亮度分给白色 LED），
-    // 仅保留 Boost + Clamp。
-    // 白色通道独立传入，仅接受 APP 或预设的显式 W 值。
+    // 最大亮度模式：跳过颜色校正矩阵和 RGB→RGBW 分离，
+    // 仅保留 Boost + Clamp，白色通道独立透传。
     float r_f = (float)r_in * BRIGHTNESS_BOOST;
     float g_f = (float)g_in * BRIGHTNESS_BOOST;
     float b_f = (float)b_in * BRIGHTNESS_BOOST;
-    
+
     if (r_f > 255.0f) r_f = 255.0f;
     if (g_f > 255.0f) g_f = 255.0f;
     if (b_f > 255.0f) b_f = 255.0f;
-    
+
     *r_out = (uint8_t)(r_f + 0.5f);
     *g_out = (uint8_t)(g_f + 0.5f);
     *b_out = (uint8_t)(b_f + 0.5f);
-    *w_out = w_in;  // 透传白通道，不受 boost 影响
+    *w_out = w_in;
 }
 
 // ============================================================

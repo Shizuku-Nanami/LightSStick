@@ -37,7 +37,7 @@
 #define CHAR_STROBE_UUID                0xFFF9
 
 // 软件版本号（自动迭代）
-#define SOFTWARE_VERSION                "3.1.0"
+#define SOFTWARE_VERSION                "3.1.2"
 
 // BLE 服务结构体
 typedef struct {
