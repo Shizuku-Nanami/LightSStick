@@ -19,8 +19,10 @@
 APP_TIMER_DEF(m_strobe_timer);
 
 // ============================================================
-// 颜色校正流水线配置
+// 颜色校正流水线配置（当前被禁用 — 使用最大亮度直通模式）
+// 如需重新启用颜色校正，删除下方 #if 0 和 #endif 即可
 // ============================================================
+#if 0
 
 // [D] Gamma Decode: sRGB → Linear（256 字节查找表）
 // 使用 sRGB 标准 gamma 曲线（gamma ≈ 2.2）
@@ -78,24 +80,13 @@ static const uint8_t linear_to_srgb[256] = {
 // [B] RGBW 分离配置
 #define W_MAX_LIMIT    255.0f   // 白色分量上限（允许满亮度）
 
-// 亮度增益（1.5 = 提升 50%）
-#define BRIGHTNESS_BOOST  1.50f
-
-// ============================================================
-// 颜色校正流水线内部函数
-// ============================================================
-
-/**
- * @brief Gamma Decode：sRGB → Linear（查表法）
- */
+// ── Gamma Decode：sRGB → Linear（查表法） ──
 static inline float gamma_decode(uint8_t val)
 {
     return (float)srgb_to_linear[val];
 }
 
-/**
- * @brief Gamma Encode：Linear → sRGB（查表法）
- */
+// ── Gamma Encode：Linear → sRGB（查表法） ──
 static inline uint8_t gamma_encode(float val)
 {
     if (val <= 0.0f) return 0;
@@ -103,9 +94,7 @@ static inline uint8_t gamma_encode(float val)
     return linear_to_srgb[(uint8_t)(val + 0.5f)];
 }
 
-/**
- * @brief 3×3 颜色校正矩阵（线性空间）
- */
+// ── 3×3 颜色校正矩阵（线性空间） ──
 static inline void apply_matrix(float r, float g, float b,
                                 float *r_out, float *g_out, float *b_out)
 {
@@ -114,35 +103,32 @@ static inline void apply_matrix(float r, float g, float b,
     *b_out = M_BR * r + M_BG * g + M_BB * b;
 }
 
-/**
- * @brief RGB → RGBW 分离（线性空间）
- */
+// ── RGB → RGBW 分离（线性空间） ──
 static inline void rgb_to_rgbw(float r, float g, float b,
                                 float *r_out, float *g_out, float *b_out, float *w_out)
 {
-    // 白色分量 = RGB 最小值
     float w = r;
     if (g < w) w = g;
     if (b < w) w = b;
-    
-    // 限制白色分量
     if (w > W_MAX_LIMIT) w = W_MAX_LIMIT;
-    
     *r_out = r - w;
     *g_out = g - w;
     *b_out = b - w;
     *w_out = w;
 }
 
-/**
- * @brief 亮度限制（Clamp 0-255）
- */
+// ── 亮度限制（Clamp 0-255） ──
 static inline uint8_t clamp_to_uint8(float val)
 {
     if (val < 0.0f) return 0;
     if (val > 255.0f) return 255;
-    return (uint8_t)(val + 0.5f);  // 四舍五入
+    return (uint8_t)(val + 0.5f);
 }
+
+#endif // 0 — 最大亮度模式已禁用颜色校正管线
+
+// 亮度增益（2.5x = Boost 150%）
+#define BRIGHTNESS_BOOST  2.50f
 
 // ============================================================
 // 颜色校正流水线（公开接口）
@@ -151,36 +137,22 @@ static inline uint8_t clamp_to_uint8(float val)
 void led_color_correct(uint8_t r_in, uint8_t g_in, uint8_t b_in, uint8_t w_in,
                        uint8_t *r_out, uint8_t *g_out, uint8_t *b_out, uint8_t *w_out)
 {
-    // [C] 3×3 颜色校正矩阵（跳过 Gamma，直接在输入值上操作）
-    float r_m = (float)r_in;
-    float g_m = (float)g_in;
-    float b_m = (float)b_in;
-    apply_matrix(r_m, g_m, b_m, &r_m, &g_m, &b_m);
+    // 最大亮度模式：跳过颜色校正矩阵（绿色不再被削减20%），
+    // 跳过 RGB→RGBW 分离（不再把颜色亮度分给白色 LED），
+    // 仅保留 Boost + Clamp。
+    // 白色通道独立传入，仅接受 APP 或预设的显式 W 值。
+    float r_f = (float)r_in * BRIGHTNESS_BOOST;
+    float g_f = (float)g_in * BRIGHTNESS_BOOST;
+    float b_f = (float)b_in * BRIGHTNESS_BOOST;
     
-    // [C+] 亮度增益
-    r_m *= BRIGHTNESS_BOOST;
-    g_m *= BRIGHTNESS_BOOST;
-    b_m *= BRIGHTNESS_BOOST;
+    if (r_f > 255.0f) r_f = 255.0f;
+    if (g_f > 255.0f) g_f = 255.0f;
+    if (b_f > 255.0f) b_f = 255.0f;
     
-    // [B] RGB → RGBW 分离
-    float r_w, g_w, b_w, w_f;
-    rgb_to_rgbw(r_m, g_m, b_m, &r_w, &g_w, &b_w, &w_f);
-    
-    // 亮度限制（Clamp 0-255）
-    if (r_w < 0.0f) r_w = 0.0f;
-    if (r_w > 255.0f) r_w = 255.0f;
-    if (g_w < 0.0f) g_w = 0.0f;
-    if (g_w > 255.0f) g_w = 255.0f;
-    if (b_w < 0.0f) b_w = 0.0f;
-    if (b_w > 255.0f) b_w = 255.0f;
-    if (w_f < 0.0f) w_f = 0.0f;
-    if (w_f > 255.0f) w_f = 255.0f;
-    
-    // 输出（跳过 Gamma Encode）
-    *r_out = (uint8_t)(r_w + 0.5f);
-    *g_out = (uint8_t)(g_w + 0.5f);
-    *b_out = (uint8_t)(b_w + 0.5f);
-    *w_out = clamp_to_uint8(w_f + (float)w_in);
+    *r_out = (uint8_t)(r_f + 0.5f);
+    *g_out = (uint8_t)(g_f + 0.5f);
+    *b_out = (uint8_t)(b_f + 0.5f);
+    *w_out = w_in;  // 透传白通道，不受 boost 影响
 }
 
 // ============================================================
@@ -307,7 +279,7 @@ static void send_color(const led_color_t *p_color)
 {
     uint16_t bit_idx = 0;
 
-    // SK6812 协议: G → R → B → W 顺序发送
+    // SK6812 协议: G → R → B → W 顺序发送（MSB 优先）
     byte_to_pwm(p_color->g, bit_idx);  bit_idx += 8;
     byte_to_pwm(p_color->r, bit_idx);  bit_idx += 8;
     byte_to_pwm(p_color->b, bit_idx);  bit_idx += 8;
